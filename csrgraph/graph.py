@@ -492,9 +492,10 @@ def read_edgelist(f, directed=True, sep=r"\s+", header=None, keep_default_na=Fal
         Pass these kwargs as you would normally to pd.read_csv.
     Returns : csrgraph
     """
+    print('memory0', memory_profiler.memory_usage()[0])
     # Read in csv correctly to each column
     elist = pd.read_csv(f, sep=sep, header=header, keep_default_na=keep_default_na, **readcsvkwargs)
-    print('memory0', memory_profiler.memory_usage()[0])
+    print('memory0a', memory_profiler.memory_usage()[0])
     print('elist size 0', sys.getsizeof(elist))
     if len(elist.columns) == 2:
         elist.columns = ['src', 'dst']
@@ -562,10 +563,11 @@ def read_edgelist(f, directed=True, sep=r"\s+", header=None, keep_default_na=Fal
         gc.collect()
         print('memory5', memory_profiler.memory_usage()[0])
     # Need to sort by src for _edgelist_to_graph
-    #elist = elist.sort_values(by='src')
-    order = np.lexsort(elist['src'].values)
-    for col in list(elist.columns):
-        elist[col] = elist[col].values[order]
+    elist = elist.sort_values(by='src')
+    # https://github.com/pandas-dev/pandas/issues/15389
+    #order = np.lexsort(elist['src'].values)
+    #for col in list(elist.columns):
+    #    elist[col] = elist[col].values[order]
     # extract numpy arrays and clear memory
     print('memory6', memory_profiler.memory_usage()[0])
     src = elist.src.to_numpy()
