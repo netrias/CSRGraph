@@ -492,10 +492,10 @@ def read_edgelist(f, directed=True, sep=r"\s+", header=None, keep_default_na=Fal
         Pass these kwargs as you would normally to pd.read_csv.
     Returns : csrgraph
     """
-    print('memory0', memory_profiler.memory_usage()[0])
+    print('m2b', memory_profiler.memory_usage()[0])
     # Read in csv correctly to each column
     elist = pd.read_csv(f, sep=sep, header=header, keep_default_na=keep_default_na, **readcsvkwargs)
-    print('memory0a', memory_profiler.memory_usage()[0])
+    print('m2c', memory_profiler.memory_usage()[0])
     print('elist size 0', sys.getsizeof(elist))
     if len(elist.columns) == 2:
         elist.columns = ['src', 'dst']
@@ -510,16 +510,19 @@ def read_edgelist(f, directed=True, sep=r"\s+", header=None, keep_default_na=Fal
             Read File: \n{elist.head(5)}
         """)
     print('using modified csrgraph')
+    print('m2d', memory_profiler.memory_usage()[0])
     # Create name mapping to normalize node IDs
     # Somehow this is 1.5x faster than np.union1d. Shame on numpy.
     allnodes = list(
         set(elist.src.unique())
         .union(set(elist.dst.unique())))
     # Factor all nodes to unique IDs
+    print('m2e', memory_profiler.memory_usage()[0])
     names = (
         pd.Series(allnodes).astype('category')
         .cat.categories
     )
+    print('m2f', memory_profiler.memory_usage()[0])
     nnodes = names.shape[0]
     # Get the input data type
     if nnodes > UINT32_MAX:
@@ -531,7 +534,7 @@ def read_edgelist(f, directed=True, sep=r"\s+", header=None, keep_default_na=Fal
     print(f"nnodes: {nnodes} dtype: {dtype}")
     name_dict = dict(zip(names,
                          np.arange(names.shape[0], dtype=dtype)))
-    print('memory1', memory_profiler.memory_usage()[0])
+    print('m2g', memory_profiler.memory_usage()[0])
     print('elist size 1', sys.getsizeof(elist))
     elist.src = elist.src.map(name_dict)
     elist.dst = elist.dst.map(name_dict)
@@ -539,11 +542,11 @@ def read_edgelist(f, directed=True, sep=r"\s+", header=None, keep_default_na=Fal
     if dtype == np.uint16:
         elist.src = np.uint16(elist.src.values)
         elist.dst = np.uint16(elist.dst.values)
-    print('memory2', memory_profiler.memory_usage()[0])
+    print('m2h', memory_profiler.memory_usage()[0])
     print('elist size 2', sys.getsizeof(elist))
     # convert weights to float32 (NEED TO DOUCLBE CHECK this doesn't affect the embedding output)
     elist.weight = np.float32(elist.weight.values)
-    print('memory3', memory_profiler.memory_usage()[0])
+    print('m2i', memory_profiler.memory_usage()[0])
     print('elist size 3', sys.getsizeof(elist))
     # clean up temp data
     allnodes = None
@@ -553,32 +556,34 @@ def read_edgelist(f, directed=True, sep=r"\s+", header=None, keep_default_na=Fal
     if not directed:
         print("before elist.copy")
         other_df = elist.copy()
-        print('memory4', memory_profiler.memory_usage()[0])
+        print('m2j', memory_profiler.memory_usage()[0])
         other_df.columns = ['dst', 'src', 'weight']
         elist = pd.concat([elist, other_df])
-        print('memory4a', memory_profiler.memory_usage()[0])
+        print('m2k', memory_profiler.memory_usage()[0])
         #other_df = None
         del other_df
-        print('memory4b', memory_profiler.memory_usage()[0])
+        print('m2l', memory_profiler.memory_usage()[0])
         gc.collect()
-        print('memory5', memory_profiler.memory_usage()[0])
+        print('m2m', memory_profiler.memory_usage()[0])
     # Need to sort by src for _edgelist_to_graph
-    elist = elist.sort_values(by='src')
+    #elist = elist.sort_values(by='src')
     # https://github.com/pandas-dev/pandas/issues/15389
-    #order = np.lexsort(elist['src'].values)
-    #for col in list(elist.columns):
-    #    elist[col] = elist[col].values[order]
+    order = np.lexsort(elist['src'].values)
+    print('m2n', memory_profiler.memory_usage()[0])
+    for col in list(elist.columns):
+        print(f"col: {col}")
+        elist[col] = elist[col].values[order]
     # extract numpy arrays and clear memory
-    print('memory6', memory_profiler.memory_usage()[0])
+    print('m2o', memory_profiler.memory_usage()[0])
     src = elist.src.to_numpy()
     dst = elist.dst.to_numpy()
     weight = elist.weight.to_numpy()
     elist = None
     gc.collect()
-    print('memory7', memory_profiler.memory_usage()[0])
+    print('m2p', memory_profiler.memory_usage()[0])
     G = methods._edgelist_to_graph(
         src, dst, weight,
         nnodes, nodenames=names
     )
-    print('memory8', memory_profiler.memory_usage()[0])
+    print('m2q', memory_profiler.memory_usage()[0])
     return G
