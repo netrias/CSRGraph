@@ -566,13 +566,13 @@ def read_edgelist(f, directed=True, sep=r"\s+", header=None, keep_default_na=Fal
         gc.collect()
         print('m2m', memory_profiler.memory_usage()[0])
     # Need to sort by src for _edgelist_to_graph
-    #elist = elist.sort_values(by='src')
+    elist = elist.sort_values(by='src')
     # https://github.com/pandas-dev/pandas/issues/15389
-    order = np.lexsort(elist['src'].values)
-    print('m2n', memory_profiler.memory_usage()[0])
-    for col in list(elist.columns):
-        print(f"col: {col}")
-        elist[col] = elist[col].values[order]
+    #order = np.lexsort(elist['src'].values)
+    #print('m2n', memory_profiler.memory_usage()[0])
+    #for col in list(elist.columns):
+    #    print(f"col: {col}")
+    #    elist[col] = elist[col].values[order]
     # extract numpy arrays and clear memory
     print('m2o', memory_profiler.memory_usage()[0])
     src = elist.src.to_numpy()
