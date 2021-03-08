@@ -11,6 +11,8 @@ from scipy import sparse
 from sklearn.decomposition import TruncatedSVD
 import time
 import warnings
+import memory_profiler
+import sys
 
 from csrgraph.methods import (
     _row_norm, _node_degrees, _src_multiply, _dst_multiply
@@ -22,7 +24,7 @@ from csrgraph import methods, random_walks
 from csrgraph import ggvec, glove, grarep
 
 UINT32_MAX = (2**32) - 1
-
+UINT16_MAX = (2**16) - 1
 class csrgraph():
     """
     This top level python class either calls external JIT'ed methods
@@ -492,6 +494,8 @@ def read_edgelist(f, directed=True, sep=r"\s+", header=None, keep_default_na=Fal
     """
     # Read in csv correctly to each column
     elist = pd.read_csv(f, sep=sep, header=header, keep_default_na=keep_default_na, **readcsvkwargs)
+    print('memory0', memory_profiler.memory_usage()[0])
+    print('elist size 0', sys.getsizeof(elist))
     if len(elist.columns) == 2:
         elist.columns = ['src', 'dst']
         elist['weight'] = np.ones(elist.shape[0])
@@ -504,6 +508,7 @@ def read_edgelist(f, directed=True, sep=r"\s+", header=None, keep_default_na=Fal
             or 3 (source, destination, weight)
             Read File: \n{elist.head(5)}
         """)
+    print('using modified csrgraph')
     # Create name mapping to normalize node IDs
     # Somehow this is 1.5x faster than np.union1d. Shame on numpy.
     allnodes = list(
@@ -518,33 +523,66 @@ def read_edgelist(f, directed=True, sep=r"\s+", header=None, keep_default_na=Fal
     # Get the input data type
     if nnodes > UINT32_MAX:
         dtype = np.uint64
-    else:
+    elif nnodes > UINT16_MAX:
         dtype = np.uint32
+    else:
+        dtype = np.uint16
+    print(f"nnodes: {nnodes} dtype: {dtype}")
     name_dict = dict(zip(names,
                          np.arange(names.shape[0], dtype=dtype)))
+    print('memory1', memory_profiler.memory_usage()[0])
+    print('elist size 1', sys.getsizeof(elist))
     elist.src = elist.src.map(name_dict)
     elist.dst = elist.dst.map(name_dict)
+    # convert names from float to uint16
+    if dtype == np.uint16:
+        elist.src = np.uint16(elist.src.values)
+        elist.dst = np.uint16(elist.dst.values)
+    print('memory2', memory_profiler.memory_usage()[0])
+    print('elist size 2', sys.getsizeof(elist))
+    # convert weights to float32 (NEED TO DOUCLBE CHECK this doesn't affect the embedding output)
+    elist.weight = np.float16(elist.weight.values)
+    print('memory3', memory_profiler.memory_usage()[0])
+    print('elist size 3', sys.getsizeof(elist))
     # clean up temp data
     allnodes = None
     name_dict = None
     gc.collect()
     # If undirected graph, append edgelist to reversed self
     if not directed:
+        print("before elist.copy")
         other_df = elist.copy()
+        print('memory4', memory_profiler.memory_usage()[0])
         other_df.columns = ['dst', 'src', 'weight']
         elist = pd.concat([elist, other_df])
+        print('memory4a', memory_profiler.memory_usage()[0])
         other_df = None
         gc.collect()
+        print('memory5', memory_profiler.memory_usage()[0])
     # Need to sort by src for _edgelist_to_graph
-    elist = elist.sort_values(by='src')
+    #elist = elist.sort_values(by='src')
+#     order = np.lexsort(elist['src'].values)
+#     for col in list(elist.columns):
+#         elist[col] = elist[col].values[order]
     # extract numpy arrays and clear memory
+    # try converting pandas to numpy arrays and then sort
+    print('memory6', memory_profiler.memory_usage()[0])
     src = elist.src.to_numpy()
     dst = elist.dst.to_numpy()
     weight = elist.weight.to_numpy()
     elist = None
     gc.collect()
+    print('memory7', memory_profiler.memory_usage()[0])
+    # sort the arrays
+    sort_index = np.argsort(src)
+    src = src[sort_index]
+    dst = dst[sort_index]
+    weight = weight[sort_index]
+    weight = np.float32(weight) # change the weight back to np.float32. csrgraph doesn't accept np.float16 type
+    del sort_index
     G = methods._edgelist_to_graph(
         src, dst, weight,
         nnodes, nodenames=names
     )
+    print('memory8', memory_profiler.memory_usage()[0])
     return G
